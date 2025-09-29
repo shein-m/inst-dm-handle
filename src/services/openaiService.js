@@ -1,42 +1,67 @@
 import OpenAI from "openai";
 import fs from "fs";
 import { fileURLToPath } from "url";
-
 import path from "path";
 
-export async function generateReply(userMessage, lang = "ru") {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Загружаем базу знаний один раз при старте
+const brandData = fs.readFileSync(
+  path.join(__dirname, "../data/brand.md"),
+  "utf-8"
+);
+
+const faqData = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "../data/faq.json"), "utf-8")
+);
+
+export async function generateReply(userMessage, lang = "ru", history) {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  // загружаем базу знаний
-  const brandData = fs.readFileSync(
-    path.join(__dirname, "../data/brand.md"),
-    "utf-8"
-  );
-  const faqData = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "../data/faq.json"), "utf-8")
-  );
+  // 2. Преобразуем FAQ в удобный формат
+  const faqString = faqData
+    .filter((f) => f.lang === lang) // берём только на нужном языке
+    .map((f) => `Q: ${f.q}\nA: ${f.a}`)
+    .join("\n\n");
 
-  const response = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: `
+  // 3. Системное сообщение
+  const systemMessage = {
+    role: "system",
+    content: `
 Ты — ассистент салона красоты Velvet Glow.
-Используй стиль бренда: дружелюбный, конкретный, без медицинских обещаний.
-Отвечай на языке клиента (${lang}).
-База знаний:
+Говори дружелюбно, конкретно, но без медицинских обещаний.
+Отвечай строго на языке клиента (${lang}).
+    `,
+  };
+
+  // 4. Контекст (бренд + FAQ)
+  const contextMessage = {
+    role: "assistant",
+    content: `
+📖 База знаний:
 ${brandData}
 
-FAQ:
-${faqData.map((f) => `${f.lang}: ${f.text}`).join("\n")}
-        `,
-      },
-      { role: "user", content: userMessage },
-    ],
+❓ ЧАВО:
+${faqString}
+    `,
+  };
+
+  // 5. Формируем массив сообщений
+  const messages = [
+    systemMessage,
+    contextMessage,
+    ...history, // история из базы
+    { role: "user", content: userMessage }, // новое сообщение
+  ];
+
+  // 6. Генерация ответа
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages,
   });
 
-  return response.choices[0].message.content;
+  const reply = response.choices[0].message.content;
+
+  return reply;
 }

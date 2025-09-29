@@ -1,12 +1,12 @@
 import express from "express";
 import {
-  igWebhookHandle,
+  igWebhookVerify,
   igWebhookMessageHandle,
 } from "../controllers/webhookControllers.js";
 
 const router = express.Router();
 
-router.get("/", igWebhookHandle);
+router.get("/", igWebhookVerify);
 router.post("/", igWebhookMessageHandle);
 
 export default router;

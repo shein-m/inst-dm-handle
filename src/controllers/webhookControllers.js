@@ -1,8 +1,11 @@
 import sendInstagramMessage from "../services/igSendMessage.js";
 import { generateReply } from "../services/openaiService.js";
 import { LngDetect } from "../services/checkLang.js";
+import { findOrCreateUser } from "../services/prismaServices/userService.js";
+import { saveMessages } from "../services/prismaServices/messageService.js";
+import { handleUserMessages } from "../services/prismaServices/handleUserMessages.js";
 
-export const igWebhookHandle = (req, res) => {
+export const igWebhookVerify = (req, res) => {
   const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN;
 
   const mode = req.query["hub.mode"];
@@ -24,13 +27,35 @@ export const igWebhookMessageHandle = async (req, res) => {
     const messaging = entry?.messaging?.[0];
     const senderId = messaging?.sender?.id;
     const message = messaging?.message?.text;
-    const lng = LngDetect(message, 1);
+    let lang = LngDetect(message, 1);
 
-    if (message && senderId) {
-      const aiReply = await generateReply(message, lng);
-      // console.log("🤖 AI Reply:", aiReply);
-      await sendInstagramMessage(senderId, aiReply);
+    // ignoring my messages
+    if (messaging.message && messaging.message.is_echo) {
+      return res.sendStatus(200);
     }
+
+    if (!senderId || !message) {
+      return res.sendStatus(400);
+    }
+
+    // find or create user
+    const user = await findOrCreateUser(senderId, "ru");
+
+    // save message
+    await saveMessages(user.id, "user", message);
+
+    // create reply from ai
+    const history = await handleUserMessages(user);
+    const aiReply = await generateReply(message, lang, history);
+
+    // save messge from ai
+    await saveMessages(user.id, "assistant", aiReply);
+
+    console.log("user message -", message);
+    console.log("Ai reply -", aiReply);
+
+    // send message to user
+    await sendInstagramMessage(senderId, aiReply);
 
     res.sendStatus(200);
   } catch (err) {

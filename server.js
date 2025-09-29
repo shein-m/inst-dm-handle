@@ -1,11 +1,11 @@
 import dotenv from "dotenv";
+dotenv.config({ path: ".env" });
 import express from "express";
 import bodyParser from "body-parser";
 import webhookRoutes from "./src/routes/webhook.js";
 
 const app = express();
 app.use(bodyParser.json());
-dotenv.config({ path: ".env" });
 
 app.use("/webhook", webhookRoutes);
 app.post("/webhook", webhookRoutes);
