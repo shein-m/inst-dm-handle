@@ -1,6 +1,5 @@
 import sendInstagramMessage from "../services/igSendMessage.js";
-import { generateReply } from "../services/openaiService.js";
-import { LngDetect } from "../services/checkLang.js";
+import { generateReply } from "../ai/openaiService.js";
 import { findOrCreateUser } from "../services/prismaServices/userService.js";
 import { saveMessages } from "../services/prismaServices/messageService.js";
 import { handleUserMessages } from "../services/prismaServices/handleUserMessages.js";
@@ -27,7 +26,6 @@ export const igWebhookMessageHandle = async (req, res) => {
     const messaging = entry?.messaging?.[0];
     const senderId = messaging?.sender?.id;
     const message = messaging?.message?.text;
-    let lang = LngDetect(message, 1);
 
     // ignoring my messages
     if (messaging.message && messaging.message.is_echo) {
@@ -39,20 +37,18 @@ export const igWebhookMessageHandle = async (req, res) => {
     }
 
     // find or create user
-    const user = await findOrCreateUser(senderId, "ru");
+    const user = await findOrCreateUser(senderId, message); //message instead lang
+    // console.log("check user - ", user);
 
     // save message
     await saveMessages(user.id, "user", message);
 
     // create reply from ai
     const history = await handleUserMessages(user);
-    const aiReply = await generateReply(message, lang, history);
+    const aiReply = await generateReply(message, history, user.lang);
 
     // save messge from ai
     await saveMessages(user.id, "assistant", aiReply);
-
-    console.log("user message -", message);
-    console.log("Ai reply -", aiReply);
 
     // send message to user
     await sendInstagramMessage(senderId, aiReply);
