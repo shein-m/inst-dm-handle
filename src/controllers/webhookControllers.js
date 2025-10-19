@@ -45,7 +45,7 @@ export const igWebhookMessageHandle = async (req, res) => {
 
     // create reply from ai
     const history = await handleUserMessages(user);
-    const aiReply = await generateReply(message, history, user.lang);
+    const aiReply = await generateReply(message, history, user);
 
     // save messge from ai
     await saveMessages(user.id, "assistant", aiReply);

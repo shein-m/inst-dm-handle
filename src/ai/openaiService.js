@@ -3,6 +3,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 import { changeLanguageTools } from "./tools/changeLanguageTools.js";
+import { toolHandler } from "./tools/toolHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,12 +18,12 @@ const faqData = JSON.parse(
   fs.readFileSync(path.join(__dirname, "../data/faq.json"), "utf-8")
 );
 
-export async function generateReply(userMessage, history, lang) {
+export async function generateReply(userMessage, history, user) {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   // 1. Преобразуем FAQ в удобный формат
   const faqString = faqData
-    .filter((f) => f.lang === lang) // берём только на нужном языке
+    .filter((f) => f.lang === user.lang) // берём только на нужном языке
     .map((f) => `Q: ${f.q}\nA: ${f.a}`)
     .join("\n\n");
 
@@ -32,7 +33,7 @@ export async function generateReply(userMessage, history, lang) {
     content: `
 Ты — ассистент салона красоты Velvet Glow.
 Говори дружелюбно, конкретно, но без медицинских обещаний.
-Отвечай строго на языке клиента (${lang}).
+Отвечай строго на языке клиента (${user.lang}).
     `,
   };
 
@@ -63,7 +64,30 @@ ${faqString}
     tools: changeLanguageTools,
   });
 
-  const reply = response.choices[0].message.content;
+  try {
+    if (response.choices[0].message.tool_calls?.length) {
+      const toolCall = response.choices[0].message.tool_calls[0];
+      await toolHandler(toolCall, user.id);
 
+      const secondResponce = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          ...history,
+          response.choices[0].message,
+          { role: "tool", content: "ok", tool_call_id: toolCall.id },
+        ],
+      });
+
+      return secondResponce.choices[0].message.content;
+    }
+
+    else {
+      console.log("No tool_calls found in the response.");
+    }
+  } catch (err) {
+    console.error("cant handle tool_calls:", err.message);
+  }
+
+  const reply = response.choices[0].message.content;
   return reply;
 }

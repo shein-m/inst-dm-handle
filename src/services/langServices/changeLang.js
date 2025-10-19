@@ -1,15 +1,15 @@
-import prisma from "../lib/prisma.js";
+import prisma from "../../lib/prisma.js";
 
-export const updateUserLanguage = async (igId, newLang) => {
+export const updateUserLanguage = async (userId, newLang) => {
   try {
     const user = await prisma.user.update({
-      where: { igId },
+      where: { id: userId },
       data: { lang: newLang },
     });
 
     return user;
   } catch (err) {
-    console.error("Ошибка при обновлении языка:", err.message);
+    console.error("Error with changeLanguage:", err.message);
     throw err;
   }
 };
